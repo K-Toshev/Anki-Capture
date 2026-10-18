@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Anki Capture",
+  "version": "1.0.0",
+  "description": "Capture tab audio, transcribe with ElevenLabs, generate Anki flashcards with Gemini.",
+  "minimum_chrome_version": "116",
+  "permissions": ["tabCapture", "offscreen", "storage", "unlimitedStorage", "downloads", "activeTab", "contextMenus", "sidePanel", "scripting"],
+  "host_permissions": [
+    "https://api.elevenlabs.io/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "Open Anki Capture sidebar" },
+  "commands": {
+    "toggle-capture": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "Start or stop Anki Capture on the current tab"
+    }
+  },
+  "side_panel": { "default_path": "sidepanel.html" }
+}

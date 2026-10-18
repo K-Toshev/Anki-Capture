@@ -1,0 +1,363 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Anki Capture</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Theme matches the AnkiCapture highlight sidebar (github.com/K-Toshev/AnkiCapture) */
+:root {
+  --bg:      #0e0e1c;
+  --surface: #181828;
+  --border:  #2a2a45;
+  --accent:  #5c5cff;
+  --green:   #00e89a;
+  --red:     #ff4a6e;
+  --purple:  #8b5cf6;
+  --orange:  #ff8800;
+  --text:    #ffffff;
+  --muted:   #7777aa;
+  --font:    'Courier New', 'Consolas', monospace;
+  --r:       7px;
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font); font-size: 12px;
+  display: flex; flex-direction: column;
+}
+body::-webkit-scrollbar       { width: 3px; }
+body::-webkit-scrollbar-track { background: var(--bg); }
+body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+@keyframes blink { 50% { opacity: 0; } }
+
+/* ── Header ─────────────────────────────────────── */
+#header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; background: var(--surface);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#logo { font-size: 13px; font-weight: bold; color: var(--green); letter-spacing: 0.08em; }
+#count-badge {
+  background: var(--accent); color: #fff; border-radius: 999px;
+  padding: 2px 9px; font-size: 11px; min-width: 24px; text-align: center;
+}
+
+/* ── Sections, labels, messages ─────────────────── */
+.section { padding: 12px 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.section-label { font-size: 10px; letter-spacing: 0.12em; margin-bottom: 5px; display: block; }
+.sec-capture  .section-label { color: var(--accent); }
+.sec-generate .section-label { color: var(--orange); }
+.sec-settings .section-label { color: var(--muted); }
+.spacer { margin-top: 10px; }
+.hint { color: var(--muted); font-size: 9px; letter-spacing: 0; }
+.err { color: var(--red); white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.4; }
+.err:not(:empty) { margin-top: 6px; }
+
+/* ── Inputs (share the AnkiCapture stage-box look) ── */
+input, textarea, select, .box {
+  width: 100%; display: block;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 7px 10px; font: 12px/1.4 var(--font);
+  transition: border-color 0.15s; outline: none;
+}
+textarea { resize: vertical; }
+.sec-capture  :is(input, textarea):focus { border-color: var(--accent); }
+.sec-generate select:focus               { border-color: var(--orange); }
+.sec-settings input:focus                { border-color: var(--muted); }
+input[type=checkbox] { width: auto; display: inline-block; accent-color: var(--accent); }
+.check { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 11px; cursor: pointer; }
+
+/* ── Buttons ────────────────────────────────────── */
+.actions { display: flex; gap: 8px; margin-top: 10px; }
+.btn {
+  flex: 1; padding: 8px 10px; border: none; border-radius: var(--r);
+  cursor: pointer; font-family: var(--font);
+  font-size: 11px; font-weight: bold; letter-spacing: 0.05em;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn:hover:not(:disabled)  { opacity: 0.82; }
+.btn:active:not(:disabled) { transform: scale(0.96); }
+.btn:disabled              { opacity: 0.3; cursor: not-allowed; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.ghost   { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.btn.export  { background: var(--green); color: #0a0a14; }
+.btn.danger  { background: var(--bg); color: var(--red); border: 1px solid var(--red); }
+.btn.stop    { background: var(--red); color: #fff; }
+.btn.orange  { background: var(--orange); color: #0a0a14; }
+
+/* Small ✕ icon button (cards, progress dismiss) */
+.card-del {
+  position: absolute; top: 5px; right: 6px;
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font: 13px var(--font); padding: 1px 4px;
+  border-radius: 4px; line-height: 1; transition: color 0.12s, background 0.12s;
+}
+.card-del:hover { color: var(--red); background: #2a1520; }
+
+/* Thin progress bar */
+.bar { height: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+
+/* ── Capture: status line ───────────────────────── */
+#status-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+#status {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+  border-radius: 3px; padding: 2px 7px; background: var(--bg);
+  color: var(--muted); border: 1px solid var(--border);
+}
+#status.st-starting, #status.st-transcribing { color: var(--orange); border-color: var(--orange); }
+#status.st-recording { color: var(--red); border-color: var(--red); }
+#status.st-recording::before { content: "● "; animation: rec-pulse 1.2s ease-in-out infinite; }
+#status.st-done  { color: var(--green); border-color: var(--green); }
+#status.st-error { color: var(--red); border-color: var(--red); background: #2a1520; }
+@keyframes rec-pulse {
+  0%, 100% { color: var(--red); text-shadow: 0 0 6px var(--red); }
+  50%      { color: #fff;       text-shadow: 0 0 6px #fff; }
+}
+.chars { color: var(--muted); font-size: 10px; letter-spacing: 0.08em; }
+.chars b { color: var(--text); }
+#live { color: var(--green); margin-left: 6px; }
+#live:empty { display: none; }
+#hint { margin-top: 6px; }
+
+/* ── Capture: timer (elapsed, media time left, auto-stop) ── */
+#timer { margin-top: 8px; }
+#timer .bar[hidden] { display: none; }
+.timer-row { display: flex; justify-content: space-between; gap: 8px; }
+.t-block { display: flex; flex-direction: column; gap: 2px; }
+.t-block.right { text-align: right; align-items: flex-end; }
+.t-label { font-size: 9px; letter-spacing: 0.12em; color: var(--muted); }
+.t-block b { font-size: 18px; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+#tLeft { color: var(--red); }
+#tLeft.idle { color: var(--muted); }
+#tBar { height: 100%; width: 0; background: var(--red); transition: width 0.5s linear; }
+.limit-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+.limit-row b { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.limit-row.ending b { color: var(--red); }
+#tLimitBar { height: 100%; width: 0; background: var(--accent); transition: width 0.5s linear; }
+.limit-row.ending + .bar #tLimitBar { background: var(--red); }
+
+/* ── Capture: time limit picker (tab style from the AnkiCapture mode bar) ── */
+.seg { display: flex; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.seg-btn {
+  flex: 1; padding: 7px 6px; background: var(--bg); color: var(--muted);
+  border: none; border-right: 1px solid var(--border);
+  font: bold 10px var(--font); letter-spacing: 0.08em; cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.seg-btn:last-child { border-right: none; }
+.seg-btn:hover:not(:disabled) { color: var(--text); background: var(--surface); }
+.seg-btn.active { color: var(--accent); background: var(--surface); box-shadow: inset 0 -2px var(--accent); }
+.seg-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.limit-input { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.limit-input input { width: 90px; }
+#limitHint:not(:empty) { margin-top: 5px; }
+
+/* ── Generate: transcript picker and viewer ─────── */
+.tx-pick { display: flex; gap: 6px; align-items: stretch; }
+.tx-pick select { flex: 1; min-width: 0; }
+.tx-pick .btn { flex: 0 0 auto; padding: 0 11px; }
+.tx-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.tx-head .section-label { margin-bottom: 0; }
+.btn.tx-copy { flex: 0 0 auto; padding: 3px 10px; font-size: 10px; }
+#txText {
+  margin-top: 5px; max-height: 280px; overflow-y: auto;
+  white-space: pre-wrap; word-break: break-word; user-select: text;
+  border-color: var(--orange);
+}
+#txText.empty { color: var(--muted); font-style: italic; border-color: var(--border); }
+#txText::-webkit-scrollbar       { width: 3px; }
+#txText::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Generate: Gemini progress ──────────────────── */
+#genClear { position: static; }
+#genBar { height: 100%; width: 0; background: var(--orange); transition: width 0.3s; }
+#genProg.running #genBar {
+  background: repeating-linear-gradient(-45deg, var(--orange) 0 8px, #c96a00 8px 16px);
+  background-size: 22.6px 100%; animation: stripes 0.6s linear infinite;
+}
+#genProg.done  #genBar { background: var(--green); }
+#genProg.error #genBar { background: var(--red); }
+#genProg.running #genPhase { color: var(--orange); }
+#genProg.done    #genPhase { color: var(--green); }
+#genProg.error   #genPhase { color: var(--red); }
+@keyframes stripes { to { background-position: 22.6px 0; } }
+.gen-stats { display: block; margin-top: 5px; }
+.gen-metrics { display: block; margin-top: 3px; cursor: help; }
+.gen-metrics:empty { display: none; }
+.gen-metrics b { color: var(--text); font-weight: normal; }
+.gen-metrics .think { color: var(--orange); }
+#genFeed {
+  margin-top: 6px; max-height: 170px; overflow-y: auto;
+  list-style: none; counter-reset: card; padding: 6px 8px;
+}
+#genFeed:empty { display: none; }
+#genFeed li { counter-increment: card; padding: 3px 0; border-bottom: 1px solid var(--border); line-height: 1.35; word-break: break-word; }
+#genFeed li:last-child { border-bottom: none; }
+#genFeed li::before { content: counter(card) ". "; color: var(--muted); }
+#genFeed li.drafting { color: var(--orange); }
+#genFeed li.drafting::after { content: "▍"; animation: blink 1s steps(2) infinite; }
+#genFeed::-webkit-scrollbar       { width: 3px; }
+#genFeed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Settings (collapsible) ─────────────────────── */
+details.sec-settings > summary {
+  list-style: none; cursor: pointer; color: var(--muted);
+  font-size: 10px; letter-spacing: 0.12em;
+}
+details.sec-settings > summary::before { content: "▸ "; }
+details.sec-settings[open] > summary::before { content: "▾ "; }
+details.sec-settings > summary:hover { color: var(--text); }
+details.sec-settings[open] > summary { margin-bottom: 10px; }
+
+/* ── Decks and cards ────────────────────────────── */
+#deck-header {
+  padding: 7px 14px; font-size: 10px; letter-spacing: 0.12em;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+#deck-header .btn { flex: 0 0 auto; padding: 4px 10px; font-size: 10px; }
+#deckMsg { padding: 0 14px; }
+#decks { padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.deck { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
+.deck[open] { border-color: var(--purple); }
+.deck > summary {
+  list-style: none; cursor: pointer; padding: 9px 11px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: bold; letter-spacing: 0.05em;
+}
+.deck > summary::before { content: "▸"; color: var(--purple); margin-right: 8px; }
+.deck[open] > summary::before { content: "▾"; }
+.deck > summary .name { flex: 1; word-break: break-word; }
+.deck-count { background: #1e1030; color: var(--purple); border-radius: 3px; padding: 1px 6px; font-size: 10px; }
+.deck-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 7px; }
+.deck-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+
+.card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 9px 11px; position: relative;
+  transition: border-color 0.15s;
+}
+.card:hover { border-color: var(--accent); }
+.card-label { font-size: 9px; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 3px; }
+.card textarea { background: var(--surface); padding: 5px 8px; }
+.card textarea:focus { border-color: var(--accent); }
+.card-sep { border: none; border-top: 1px solid var(--border); margin: 6px 0; }
+
+.empty-state { text-align: center; padding: 30px 16px; color: var(--muted); line-height: 1.8; }
+.empty-state .icon { font-size: 26px; margin-bottom: 8px; }
+
+/* ── Toast ──────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--green); color: var(--green);
+  padding: 6px 14px; border-radius: 999px; font-size: 11px;
+  max-width: calc(100% - 32px); text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 10;
+}
+#toast.show { opacity: 1; }
+</style></head><body>
+
+<div id="header">
+  <div id="logo">🃏 ANKICAPTURE</div>
+  <div id="count-badge" title="Total cards">0</div>
+</div>
+
+<!-- Capture: status, live timer, deck/prompt/time limit, Start/Stop -->
+<div class="section sec-capture">
+  <div id="status-row">
+    <span id="status">idle</span>
+    <span class="chars">CHARS <b id="count">0</b><span id="live"></span></span>
+  </div>
+  <div id="timer" hidden>
+    <div class="timer-row">
+      <span class="t-block"><span class="t-label">ELAPSED</span><b id="tElapsed">0:00</b></span>
+      <span class="t-block right"><span class="t-label" id="tLeftLabel">TIME LEFT</span><b id="tLeft">—</b></span>
+    </div>
+    <div class="bar" id="tBarWrap" hidden><div id="tBar"></div></div>
+    <div class="hint" id="tNote"></div>
+    <div class="limit-row" id="limitRow"><span class="t-label" id="tLimitLabel">AUTO-STOP IN</span><b id="tLimit"></b></div>
+    <div class="bar" id="tLimitBarWrap" hidden><div id="tLimitBar"></div></div>
+  </div>
+  <div class="hint" id="hint"></div>
+  <div class="err" id="err"></div>
+
+  <label class="section-label spacer" for="deckName">DECK <span class="hint">(cards go here)</span></label>
+  <input id="deckName">
+  <label class="section-label spacer" for="prompt">PROMPT <span class="hint">(how to write cards)</span></label>
+  <textarea id="prompt" rows="3"></textarea>
+  <span class="section-label spacer">TIME LIMIT</span>
+  <div class="seg" id="limitSeg">
+    <button class="seg-btn" data-mode="none">No limit</button>
+    <button class="seg-btn" data-mode="fixed">Stop after…</button>
+  </div>
+  <div class="limit-input" id="limitInputRow" hidden>
+    <input id="limitMinutes" type="number" min="1" max="600" step="1"><span>minutes</span>
+  </div>
+  <div class="hint" id="limitHint"></div>
+  <div class="actions"><button id="toggle" class="btn primary">● Start capture</button></div>
+</div>
+
+<!-- Generate: saved transcripts, text viewer, Gemini progress -->
+<div class="section sec-generate">
+  <label class="section-label" for="transcriptSel">TRANSCRIPT <span class="hint">(saved captures)</span></label>
+  <div class="tx-pick">
+    <select id="transcriptSel"></select>
+    <button id="exportTx" class="btn export" title="Export this transcript as a .txt file">↓ .txt</button>
+    <button id="delTx" class="btn danger" title="Delete this transcript">✕</button>
+  </div>
+  <div class="actions">
+    <button id="viewTx" class="btn ghost">▤ View text</button>
+    <button id="gen" class="btn orange">✦ Generate cards</button>
+  </div>
+  <div id="txPanel" hidden>
+    <div class="tx-head spacer">
+      <span class="section-label">TEXT <span class="hint" id="txMeta"></span></span>
+      <button id="copyTx" class="btn ghost tx-copy">Copy</button>
+    </div>
+    <div id="txText" class="box"></div>
+  </div>
+  <div class="err" id="genMsg"></div>
+  <div id="genProg" hidden>
+    <div class="tx-head spacer">
+      <span class="section-label" id="genPhase">GENERATING</span>
+      <button id="genClear" class="card-del" title="Dismiss">✕</button>
+    </div>
+    <div class="bar"><div id="genBar"></div></div>
+    <div class="chars gen-stats" id="genStats"></div>
+    <div class="chars gen-metrics" id="genMetrics"></div>
+    <div class="err" id="genErr"></div>
+    <ol id="genFeed" class="box"></ol>
+  </div>
+</div>
+
+<!-- Settings: API keys, model, transcription mode -->
+<details class="section sec-settings">
+  <summary>SETTINGS</summary>
+  <label class="section-label" for="elevenKey">ELEVENLABS API KEY</label>
+  <input id="elevenKey" type="password" placeholder="sk_...">
+  <label class="section-label spacer" for="geminiKey">GEMINI API KEY</label>
+  <input id="geminiKey" type="password" placeholder="AIza...">
+  <label class="section-label spacer" for="geminiModel">GEMINI MODEL</label>
+  <input id="geminiModel">
+  <label class="section-label spacer" for="sttMode">TRANSCRIPTION</label>
+  <select id="sttMode">
+    <option value="realtime">Realtime (live, scribe_v2_realtime)</option>
+    <option value="batch">Batch chunks (scribe_v1)</option>
+  </select>
+  <label class="section-label spacer" for="chunkSeconds">CHUNK SECONDS <span class="hint">(10-300, batch only)</span></label>
+  <input id="chunkSeconds" type="number" min="10" max="300">
+  <label class="check spacer"><input id="autoGenerate" type="checkbox">Auto-generate cards after capture</label>
+  <div class="actions"><button id="save" class="btn ghost">Save settings</button></div>
+</details>
+
+<!-- Decks: rendered by sidepanel.js -->
+<div id="deck-header"><span>DECKS</span><button id="exportAll" class="btn export" title="All decks in one Anki CSV" disabled>↓ CSV (all)</button></div>
+<div class="err" id="deckMsg"></div>
+<div id="decks"></div>
+
+<div id="toast"></div>
+<script type="module" src="sidepanel.js"></script>
+</body></html>
